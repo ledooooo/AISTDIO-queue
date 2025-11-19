@@ -1,0 +1,7 @@
+{
+  "name": "Nidaa - QMS",
+  "description": "نظام إدارة طوابير العيادات المتكامل (Integrated Clinic Queue Management System)",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
