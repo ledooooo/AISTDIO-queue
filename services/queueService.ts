@@ -56,9 +56,6 @@ const addLog = (db: DatabaseSchema, type: 'ISSUE' | 'SERVE', clinicId: string, t
 
 export const getDailyReport = () => {
     const db = getDB();
-    // Filter logs for "today" roughly (or just return all logs if we assume reset daily)
-    // For simplicity in this demo, we use all current logs, assuming admins Reset All daily.
-    
     const report: Record<string, { issued: number; served: number; name: string }> = {};
     
     db.clinics.forEach(c => {
@@ -118,16 +115,21 @@ export const updateClinicNumber = (clinicId: string, newNumber: number, announce
   }
 };
 
+export const deleteClinic = (clinicId: string) => {
+    const db = getDB();
+    db.clinics = db.clinics.filter(c => c.id !== clinicId);
+    saveDB(db);
+};
+
 export const resetQueue = (clinicId: string) => {
   const db = getDB();
   const clinicIndex = db.clinics.findIndex(c => c.id === clinicId);
   
   if (clinicIndex > -1) {
     db.clinics[clinicIndex].currentNumber = 0;
-    db.clinics[clinicIndex].ticketsIssued = 0; // Reset tickets too
+    db.clinics[clinicIndex].ticketsIssued = 0; 
     db.clinics[clinicIndex].lastCalledAt = Date.now();
     
-    // Create a reset announcement
     db.lastAnnouncement = {
         type: 'reset',
         clinicId: clinicId,
@@ -148,7 +150,6 @@ export const resetAllQueues = () => {
     lastCalledAt: Date.now()
   }));
   
-  // Clear logs on full reset usually implies new day
   db.logs = [];
 
   db.lastAnnouncement = {
@@ -198,7 +199,6 @@ export const triggerRecordingAnnouncement = (blobUrl: string) => {
     saveDB(db);
 };
 
-// Hook helper to listen to changes
 export const subscribeToChanges = (callback: () => void) => {
   window.addEventListener('storage', callback);
   return () => window.removeEventListener('storage', callback);
@@ -206,7 +206,7 @@ export const subscribeToChanges = (callback: () => void) => {
 
 // --- Security / Lockout System ---
 
-const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
 
 interface LockoutState {
@@ -214,7 +214,6 @@ interface LockoutState {
   lockoutTimestamp: number | null;
 }
 
-// Helper to get key based on context (e.g., 'admin' or 'clinic')
 const getLockoutKey = (context: string) => `nidaa_lockout_${context}`;
 
 const getLockoutState = (context: string): LockoutState => {
@@ -237,7 +236,6 @@ export const checkLockout = (context: string): { isLocked: boolean; remainingMin
         remainingMinutes: Math.ceil((LOCKOUT_DURATION_MS - elapsed) / 60000) 
       };
     } else {
-      // Lockout expired
       saveLockoutState(context, { attempts: 0, lockoutTimestamp: null });
       return { isLocked: false, remainingMinutes: 0 };
     }

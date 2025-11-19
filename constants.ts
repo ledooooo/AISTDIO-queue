@@ -7,7 +7,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   audioMode: 'TTS',
   speechRate: 1.0,
   adminPassword: "admin",
-  audioBasePath: "/assets/audio/",
+  // Changed to relative path for GitHub Pages compatibility
+  audioBasePath: "./assets/audio/", 
   videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
 };
 

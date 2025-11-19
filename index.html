@@ -24,6 +24,46 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #555;
       }
+
+      /* Print Styles for A4 30-up labels */
+      @media print {
+        @page {
+          size: A4;
+          margin: 0.5cm;
+        }
+        body {
+          background: white;
+        }
+        .no-print {
+          display: none !important;
+        }
+        .print-only {
+          display: block !important;
+        }
+        .print-page {
+          break-after: page;
+          page-break-after: always;
+          display: grid;
+          grid-template-columns: repeat(5, 1fr); /* 5 columns */
+          grid-template-rows: repeat(6, 1fr);    /* 6 rows */
+          gap: 4px;
+          height: 28cm; /* A4 printable height approx */
+          width: 100%;
+        }
+        .ticket-cell {
+          border: 1px dashed #ccc;
+          display: flex;
+          flex-col: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          padding: 2px;
+          height: 4.6cm; /* Approx 29.7cm / 6 */
+        }
+      }
+      .print-only {
+        display: none;
+      }
     </style>
   <script type="importmap">
 {

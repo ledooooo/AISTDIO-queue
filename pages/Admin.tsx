@@ -13,9 +13,10 @@ import {
   checkLockout,
   registerFailedAttempt,
   clearAttempts,
-  getDailyReport
+  getDailyReport,
+  deleteClinic
 } from '../services/queueService';
-import { Plus, Trash2, Save, Mic, Square, Play, Folder, RefreshCcw, Lock, BarChart3, Settings as SettingsIcon } from 'lucide-react';
+import { Plus, Trash2, Save, Mic, Square, Play, Folder, RefreshCcw, Lock, BarChart3, Settings as SettingsIcon, Printer, Copy } from 'lucide-react';
 
 export const Admin: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(getDB().settings);
@@ -24,7 +25,7 @@ export const Admin: React.FC = () => {
   const [authInput, setAuthInput] = useState("");
   
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'settings' | 'reports'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'reports' | 'print'>('settings');
 
   // Security State
   const [errorMsg, setErrorMsg] = useState("");
@@ -48,12 +49,17 @@ export const Admin: React.FC = () => {
   // Stats State
   const [reports, setReports] = useState<any[]>([]);
 
+  // Printing State
+  const [printClinic, setPrintClinic] = useState<string>("");
+  const [printStart, setPrintStart] = useState<number>(1);
+  const [printEnd, setPrintEnd] = useState<number>(30);
+
   useEffect(() => {
       const db = getDB();
       setSettings(db.settings);
       setClinics(db.clinics);
+      if(db.clinics.length > 0) setPrintClinic(db.clinics[0].id);
       
-      // Check Initial Lockout
       setLockoutInfo(checkLockout(LOCKOUT_CONTEXT));
 
       const unsubscribe = subscribeToChanges(() => {
@@ -73,8 +79,6 @@ export const Admin: React.FC = () => {
 
   const handleAuth = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Check lockout first
     const status = checkLockout(LOCKOUT_CONTEXT);
     if (status.isLocked) {
       setLockoutInfo(status);
@@ -114,17 +118,16 @@ export const Admin: React.FC = () => {
       }
   };
 
-  // Simulated File Picking Logic
   const handleFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files.length > 0) {
-          alert("بسبب سياسة أمان المتصفحات، لا يمكن قراءة المسار الكامل للمجلد تلقائياً. يرجى كتابة المسار يدوياً أو نسخ الملفات لمجلد المشروع.\n\nمثال: /assets/audio/");
+          alert("بسبب سياسة أمان المتصفحات، لا يمكن قراءة المسار الكامل للمجلد تلقائياً. يرجى كتابة المسار يدوياً أو نسخ الملفات لمجلد المشروع.\n\nمثال: ./assets/audio/");
       }
   };
 
   const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files.length > 0) {
           const file = e.target.files[0];
-          handleSettingChange('videoUrl', `/assets/${file.name}`);
+          handleSettingChange('videoUrl', `./assets/${file.name}`);
       }
   };
 
@@ -146,8 +149,9 @@ export const Admin: React.FC = () => {
   };
 
   const removeClinic = (id: string) => {
-    if (window.confirm("حذف العيادة؟")) {
-      setClinics(clinics.filter(c => c.id !== id));
+    if (window.confirm("هل أنت متأكد من حذف العيادة؟ لا يمكن التراجع عن هذا الإجراء.")) {
+      deleteClinic(id);
+      setClinics(clinics.filter(c => c.id !== id)); // Optimistic update
     }
   };
 
@@ -189,6 +193,21 @@ export const Admin: React.FC = () => {
       }
   }
 
+  // Printing Helper
+  const getTicketsPages = () => {
+      const tickets = [];
+      for (let i = printStart; i <= printEnd; i++) {
+          tickets.push(i);
+      }
+      
+      // Chunk into pages of 30 (5 cols * 6 rows)
+      const pages = [];
+      for (let i = 0; i < tickets.length; i += 30) {
+          pages.push(tickets.slice(i, i + 30));
+      }
+      return pages;
+  }
+
   if (!authorized) {
     if (lockoutInfo.isLocked) {
         return (
@@ -223,7 +242,7 @@ export const Admin: React.FC = () => {
 
   return (
     <Layout>
-      <div className="max-w-5xl mx-auto space-y-8 pb-10">
+      <div className="max-w-5xl mx-auto space-y-8 pb-10 no-print">
         <div className="flex justify-between items-center">
              <h1 className="text-3xl font-bold text-gray-800">لوحة التحكم الرئيسية</h1>
              <div className="flex gap-4">
@@ -233,6 +252,12 @@ export const Admin: React.FC = () => {
                         className={`px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition ${activeTab === 'settings' ? 'bg-teal-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
                      >
                          <SettingsIcon size={16} /> الإعدادات
+                     </button>
+                     <button 
+                        onClick={() => setActiveTab('print')}
+                        className={`px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition ${activeTab === 'print' ? 'bg-teal-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                     >
+                         <Printer size={16} /> طباعة تذاكر
                      </button>
                      <button 
                         onClick={() => setActiveTab('reports')}
@@ -271,6 +296,58 @@ export const Admin: React.FC = () => {
                         </table>
                     </div>
                     {reports.length === 0 && <p className="text-center text-gray-500 mt-4">لا توجد بيانات اليوم</p>}
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'print' && (
+            <div className="space-y-6">
+                <div className="bg-white p-6 rounded-xl shadow-sm">
+                    <h2 className="text-xl font-bold mb-6 text-teal-700 border-b pb-2">طباعة تذاكر مسبقة (A4)</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">العيادة</label>
+                            <select 
+                                className="w-full p-2 border rounded"
+                                value={printClinic}
+                                onChange={(e) => setPrintClinic(e.target.value)}
+                            >
+                                {clinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">من رقم</label>
+                            <input 
+                                type="number" 
+                                className="w-full p-2 border rounded"
+                                value={printStart}
+                                onChange={(e) => setPrintStart(parseInt(e.target.value))}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">إلى رقم</label>
+                            <input 
+                                type="number" 
+                                className="w-full p-2 border rounded"
+                                value={printEnd}
+                                onChange={(e) => setPrintEnd(parseInt(e.target.value))}
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="flex justify-between items-center bg-blue-50 p-4 rounded mb-6">
+                        <p className="text-blue-800 text-sm">
+                            سيتم طباعة <strong>{printEnd - printStart + 1}</strong> تذكرة، موزعة على <strong>{Math.ceil((printEnd - printStart + 1) / 30)}</strong> صفحات A4.
+                            <br/>
+                            كل صفحة تحتوي على 30 تذكرة (5 أعمدة × 6 صفوف).
+                        </p>
+                        <button 
+                            onClick={() => window.print()}
+                            className="bg-blue-600 text-white px-6 py-2 rounded font-bold flex items-center gap-2 hover:bg-blue-700"
+                        >
+                            <Printer size={18} /> معاينة وطباعة
+                        </button>
+                    </div>
                 </div>
             </div>
         )}
@@ -341,7 +418,7 @@ export const Admin: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-1 gap-6">
                     <div className="bg-blue-50 p-4 rounded-lg text-sm text-blue-800 mb-2">
-                        <strong>ملاحظة:</strong> يمكنك استخدام روابط يوتيوب للفيديو، أو مسارات ملفات محلية. لاختيار المسار، استخدم الأزرار المساعدة أو اكتب المسار يدوياً.
+                        <strong>ملاحظة:</strong> يمكنك استخدام روابط يوتيوب للفيديو، أو مسارات ملفات محلية.
                     </div>
                     
                     {/* Audio Path */}
@@ -351,7 +428,7 @@ export const Admin: React.FC = () => {
                             <input 
                             type="text" 
                             dir="ltr"
-                            placeholder="/assets/audio/"
+                            placeholder="./assets/audio/"
                             className="flex-1 p-2 border rounded bg-gray-50 text-left"
                             value={settings.audioBasePath}
                             onChange={(e) => handleSettingChange('audioBasePath', e.target.value)}
@@ -359,7 +436,7 @@ export const Admin: React.FC = () => {
                             <input 
                                 type="file" 
                                 ref={audioFolderInputRef} 
-                                // @ts-ignore - webkitdirectory is non-standard but widely supported
+                                // @ts-ignore
                                 webkitdirectory="" 
                                 directory="" 
                                 className="hidden" 
@@ -372,7 +449,6 @@ export const Admin: React.FC = () => {
                                 اختيار مجلد
                             </button>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">يحتوي على ملفات الأرقام و reset.mp3</p>
                     </div>
 
                     {/* Video Path / URL */}
@@ -382,7 +458,7 @@ export const Admin: React.FC = () => {
                             <input 
                             type="text" 
                             dir="ltr"
-                            placeholder="https://www.youtube.com/watch?v=... OR /assets/video.mp4"
+                            placeholder="https://www.youtube.com/watch?v=... OR ./assets/video.mp4"
                             className="flex-1 p-2 border rounded bg-gray-50 text-left"
                             value={settings.videoUrl}
                             onChange={(e) => handleSettingChange('videoUrl', e.target.value)}
@@ -401,7 +477,6 @@ export const Admin: React.FC = () => {
                                 اختيار ملف
                             </button>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">يدعم روابط يوتيوب المباشرة أو ملفات الفيديو المحلية</p>
                     </div>
                 </div>
                 </section>
@@ -450,7 +525,6 @@ export const Admin: React.FC = () => {
 
                 {/* Announcements */}
                 <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Custom Text Announcement */}
                     <div className="bg-white p-6 rounded-xl shadow-sm">
                     <h2 className="text-xl font-bold mb-4 text-teal-700">نداء كتابي</h2>
                     <textarea 
@@ -473,7 +547,6 @@ export const Admin: React.FC = () => {
                     </button>
                     </div>
 
-                    {/* Voice Recording */}
                     <div className="bg-white p-6 rounded-xl shadow-sm">
                     <h2 className="text-xl font-bold mb-4 text-teal-700">نداء صوتي فوري</h2>
                     <div className="flex flex-col items-center gap-4">
@@ -507,6 +580,23 @@ export const Admin: React.FC = () => {
                 </section>
             </>
         )}
+      </div>
+
+      {/* Print-only section */}
+      <div className="print-only">
+          {activeTab === 'print' && getTicketsPages().map((page, pIndex) => (
+              <div key={pIndex} className="print-page">
+                  {page.map(ticketNum => (
+                      <div key={ticketNum} className="ticket-cell">
+                          <h3 className="text-xs text-gray-600 mb-1">
+                              {clinics.find(c => c.id === printClinic)?.name || "العيادة"}
+                          </h3>
+                          <div className="text-4xl font-black">{ticketNum}</div>
+                          <p className="text-[10px] mt-1">{settings.centerName}</p>
+                      </div>
+                  ))}
+              </div>
+          ))}
       </div>
     </Layout>
   );
